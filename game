@@ -1,0 +1,1508 @@
+import React, { useState, useEffect } from "react";
+import {
+  StyleSheet,
+  Text,
+  View,
+  TouchableOpacity,
+  SafeAreaView,
+  ScrollView,
+  TextInput,
+} from "react-native";
+
+export default function HomeScreen() {
+  const [screen, setScreen] = useState<
+    | "home"
+    | "create"
+    | "joinRoom"
+    | "gameConfig"
+    | "roomPlayers"
+    | "liveGameSim"
+    | "speedGameSim"
+  >("home");
+  const [roomCode, setRoomCode] = useState("");
+  const [inputCode, setInputCode] = useState("");
+
+  // إعدادات اللعبة والأطوار
+  const [gameMode, setGameMode] = useState<"lie" | "speedChoices">("lie");
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([
+    "عشوائي",
+  ]);
+  const [rounds, setRounds] = useState(3);
+  const [maxPlayers, setMaxPlayers] = useState(4);
+  const [enableBot, setEnableBot] = useState(false);
+
+  // أعضاء الغرفة
+  const [players, setPlayers] = useState([
+    { id: "1", name: "أبدالرحمن (أنت)", isLeader: true, isBot: false },
+    { id: "2", name: "محمد شقرة", isLeader: false, isBot: false },
+    { id: "3", name: "لاعب رقم 3", isLeader: false, isBot: false },
+  ]);
+
+  // حالات الجيم الفعلي (طور الكذب)
+  const [currentRound, setCurrentRound] = useState(1);
+  const [simulationStep, setSimulationStep] = useState<
+    "writeLie" | "chooseAnswer" | "roundResult" | "leaderboard" | "finalPodium"
+  >("writeLie");
+  const [timer, setTimer] = useState(90);
+
+  // حالات طور السرعة (10 ثواني)
+  const [speedRound, setSpeedRound] = useState(1);
+  const [speedTimer, setSpeedTimer] = useState(10);
+  const [speedStep, setSpeedStep] = useState<"playing" | "result" | "final">(
+    "playing",
+  );
+  const [speedSelectedOpt, setSpeedSelectedOpt] = useState<number | null>(null);
+
+  // خانات الكذب وقدرات الكتابة والتنقي
+  const [lieInput1, setLieInput1] = useState("");
+  const [lieInput2, setLieInput2] = useState("");
+  const [selectedWriteAbility, setSelectedWriteAbility] = useState<
+    "doubleLie" | "doubleLieScore" | null
+  >(null);
+  const [isDoubleLieUsed, setIsDoubleLieUsed] = useState(false);
+  const [isDoubleLieScoreUsed, setIsDoubleLieScoreUsed] = useState(false);
+
+  const [selectedChoiceIndex, setSelectedChoiceIndex] = useState<number | null>(
+    null,
+  );
+  const [clarificationActive, setClarificationActive] = useState(false);
+  const [doubleLuckActive, setDoubleLuckActive] = useState(false);
+  const [isClarificationUsed, setIsClarificationUsed] = useState(false);
+  const [isDoubleLuckUsed, setIsDoubleLuckUsed] = useState(false);
+
+  const [playersScores, setPlayersScores] = useState([
+    {
+      id: "1",
+      name: "أبدالرحمن (أنت)",
+      score: 10,
+      choice: "الإجابة الصحيحة",
+      diff: "+4 نقاط",
+      reason: "كذبتك انخدع فيها فلان",
+    },
+    {
+      id: "2",
+      name: "محمد شقرة",
+      score: 6,
+      choice: "كذبة مطروحة",
+      diff: "0 نقاط",
+      reason: "انخدع بالكذبة (بدون خصم)",
+    },
+    {
+      id: "3",
+      name: "لاعب رقم 3",
+      score: 4,
+      choice: "لم يختار",
+      diff: "-1 نقطة",
+      reason: "نسي يكتب أو ينقي بالوقت",
+    },
+  ]);
+
+  const categories = [
+    "عشوائي",
+    "حيوانات",
+    "دول",
+    "أنمي",
+    "كرة قدم",
+    "تاريخ وجغرافيا",
+    "ألعاب",
+  ];
+
+  // التايمر لطور الكذب (دقيقة ونص)
+  useEffect(() => {
+    if (
+      screen === "liveGameSim" &&
+      (simulationStep === "writeLie" || simulationStep === "chooseAnswer")
+    ) {
+      const interval = setInterval(() => {
+        setTimer((prev) => {
+          if (prev <= 1) {
+            if (simulationStep === "writeLie")
+              setSimulationStep("chooseAnswer");
+            else if (simulationStep === "chooseAnswer")
+              setSimulationStep("roundResult");
+            return 90;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      return () => clearInterval(interval);
+    }
+  }, [screen, simulationStep]);
+
+  // التايمر لطور السرعة (10 ثواني)
+  useEffect(() => {
+    if (screen === "speedGameSim" && speedStep === "playing") {
+      const interval = setInterval(() => {
+        setSpeedTimer((prev) => {
+          if (prev <= 1) {
+            setSpeedStep("result");
+            return 10;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      return () => clearInterval(interval);
+    }
+  }, [screen, speedStep]);
+
+  const toggleCategory = (cat: string) => {
+    if (cat === "عشوائي") {
+      setSelectedCategories(["عشوائي"]);
+      return;
+    }
+    let updated = selectedCategories.filter((c) => c !== "عشوائي");
+    if (updated.includes(cat)) {
+      updated = updated.filter((c) => c !== cat);
+    } else {
+      updated.push(cat);
+    }
+    if (updated.length === 0) updated = ["عشوائي"];
+    setSelectedCategories(updated);
+  };
+
+  const handleCreateRoom = () => {
+    const randomCode = Math.floor(1000 + Math.random() * 9000).toString();
+    setRoomCode(randomCode);
+    setScreen("create");
+  };
+
+  const toggleBotInRoom = () => {
+    // يعمل فقط في طور الكذب والخداع
+    if (gameMode !== "lie") return;
+    const newState = !enableBot;
+    setEnableBot(newState);
+    if (newState) {
+      setPlayers((prev) => [
+        ...prev,
+        { id: "bot-99", name: "بوت نصاب 🤖", isLeader: false, isBot: true },
+      ]);
+    } else {
+      setPlayers((prev) => prev.filter((p) => !p.isBot));
+    }
+  };
+
+  const kickPlayer = (id: string) => {
+    setPlayers(players.filter((p) => p.id !== id));
+  };
+
+  const makeLeader = (id: string) => {
+    setPlayers(players.map((p) => ({ ...p, isLeader: p.id === id })));
+  };
+
+  // شاشة الانضمام لغرفة بكود
+  if (screen === "joinRoom") {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.centerBox}>
+          <Text style={styles.title}>انضم إلى غرفة 🚪</Text>
+          <Text style={styles.subtitle}>
+            أدخل كود الغرفة المكون من 4 أرقام:
+          </Text>
+
+          <TextInput
+            style={[
+              styles.textInputBox,
+              { textAlign: "center", fontSize: 24, letterSpacing: 5 },
+            ]}
+            placeholder="0000"
+            placeholderTextColor="#94a3b8"
+            maxLength={4}
+            keyboardType="numeric"
+            value={inputCode}
+            onChangeText={setInputCode}
+          />
+
+          <TouchableOpacity
+            style={[styles.buttonPrimary, { marginTop: 15 }]}
+            onPress={() => {
+              if (inputCode.length === 4) {
+                alert(`تم الانضمام للغرفة بنجاح برمز: ${inputCode}`);
+                setScreen("create");
+              } else {
+                alert("الرجاء إدخال كود صحيح من 4 أرقام");
+              }
+            }}
+          >
+            <Text style={styles.buttonText}>دخول الغرفة 🚀</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.buttonSecondary}
+            onPress={() => setScreen("home")}
+          >
+            <Text style={styles.buttonTextSecondary}>الرجوع</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // شاشة إنشاء الغرفة
+  if (screen === "create") {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.centerBox}>
+          <Text style={styles.title}>غرفة التحدي جاهزة 🔥</Text>
+          <Text style={styles.codeLabel}>كود الغرفة:</Text>
+          <View style={styles.codeBox}>
+            <Text style={styles.codeText}>{roomCode}</Text>
+          </View>
+          <Text style={styles.subtitle}>شارك الكود مع أصحابك للدخول...</Text>
+
+          <TouchableOpacity
+            style={styles.buttonPrimary}
+            onPress={() => setScreen("roomPlayers")}
+          >
+            <Text style={styles.buttonText}>إدارة اللاعبين بالغرفة 👑</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.buttonPrimary,
+              { backgroundColor: "#4c1d95", marginTop: 10 },
+            ]}
+            onPress={() => setScreen("gameConfig")}
+          >
+            <Text style={styles.buttonText}>إعدادات اللعبة والأطوار</Text>
+          </TouchableOpacity>
+
+          {gameMode === "lie" ? (
+            <TouchableOpacity
+              style={[
+                styles.buttonPrimary,
+                { backgroundColor: "#059669", marginTop: 10 },
+              ]}
+              onPress={() => {
+                setCurrentRound(1);
+                setTimer(90);
+                setSimulationStep("writeLie");
+                setScreen("liveGameSim");
+              }}
+            >
+              <Text style={styles.buttonText}>🎮 بدء لعبة الكذب والخداع</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={[
+                styles.buttonPrimary,
+                { backgroundColor: "#0284c7", marginTop: 10 },
+              ]}
+              onPress={() => {
+                setSpeedRound(1);
+                setSpeedTimer(10);
+                setSpeedStep("playing");
+                setScreen("speedGameSim");
+              }}
+            >
+              <Text style={styles.buttonText}>
+                ⚡ بدء لعبة السرعة والاختيارات
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          <TouchableOpacity
+            style={styles.buttonSecondary}
+            onPress={() => setScreen("home")}
+          >
+            <Text style={styles.buttonTextSecondary}>الرجوع للرئيسية</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // شاشة إدارة اللاعبين
+  if (screen === "roomPlayers") {
+    return (
+      <SafeAreaView style={styles.container}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContainer}
+          showsVerticalScrollIndicator={false}
+        >
+          <Text style={styles.configMainTitle}>إدارة أعضاء الغرفة 🛡️</Text>
+          <Text style={styles.subtitle}>قائمة اللاعبين المتواجدين حالياً:</Text>
+
+          <View style={styles.playersListContainer}>
+            {players.map((player) => (
+              <View
+                key={player.id}
+                style={[styles.playerCard, player.isBot && styles.botCardStyle]}
+              >
+                <View>
+                  <Text style={styles.playerName}>{player.name}</Text>
+                  <Text style={styles.playerRole}>
+                    {player.isLeader
+                      ? "👑 قائد الغرفة (الليدر)"
+                      : player.isBot
+                        ? "🤖 مشارك تلقائي بالكذب"
+                        : "🎮 لاعب"}
+                  </Text>
+                </View>
+                <View style={styles.playerActions}>
+                  {!player.isLeader && !player.isBot && (
+                    <>
+                      <TouchableOpacity
+                        style={styles.actionBtnLeader}
+                        onPress={() => makeLeader(player.id)}
+                      >
+                        <Text style={styles.actionBtnText}>تعيين ليدر</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.actionBtnKick}
+                        onPress={() => kickPlayer(player.id)}
+                      >
+                        <Text style={styles.actionBtnText}>طرد</Text>
+                      </TouchableOpacity>
+                    </>
+                  )}
+                </View>
+              </View>
+            ))}
+          </View>
+
+          <TouchableOpacity
+            style={[styles.buttonSecondary, { marginTop: 20 }]}
+            onPress={() => setScreen("create")}
+          >
+            <Text style={styles.buttonTextSecondary}>رجوع لإعدادات الغرفة</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
+  // شاشة الإعدادات والأطوار (إعدادات البوت والقدرات تخص طور الكذب فقط)
+  if (screen === "gameConfig") {
+    return (
+      <SafeAreaView style={styles.container}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContainer}
+          showsVerticalScrollIndicator={false}
+        >
+          <Text style={styles.configMainTitle}>إعدادات فلها أو ما تفلها</Text>
+
+          <Text style={styles.label}>اختر طور اللعب:</Text>
+          <View style={styles.row}>
+            <TouchableOpacity
+              style={[
+                styles.optionBtn,
+                gameMode === "lie" && styles.selectedOpt,
+              ]}
+              onPress={() => setGameMode("lie")}
+            >
+              <Text
+                style={[
+                  styles.optionText,
+                  gameMode === "lie" && styles.selectedOptText,
+                ]}
+              >
+                طور الكذب والخداع
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.optionBtn,
+                gameMode === "speedChoices" && styles.selectedOpt,
+              ]}
+              onPress={() => {
+                setGameMode("speedChoices");
+                // إزالة البوت تلقائياً عند اختيار طور السرعة
+                setEnableBot(false);
+                setPlayers((prev) => prev.filter((p) => !p.isBot));
+              }}
+            >
+              <Text
+                style={[
+                  styles.optionText,
+                  gameMode === "speedChoices" && styles.selectedOptText,
+                ]}
+              >
+                طور السرعة والاختيارات ⚡
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {gameMode === "lie" ? (
+            <View style={styles.modeSettingsCard}>
+              <Text style={styles.modeCardTitle}>
+                إعدادات طور الكذب والخداع 🤥
+              </Text>
+              <Text style={styles.modeCardDesc}>
+                القدرات التكتيكية، تدبيل الكذب، وبوت النصاب.
+              </Text>
+
+              <TouchableOpacity
+                style={[styles.botToggleBtn, enableBot && styles.activeToggle]}
+                onPress={toggleBotInRoom}
+              >
+                <Text style={styles.toggleText}>
+                  {enableBot
+                    ? "🤖 بوت النصاب مفعل (يشارك بالكذب)"
+                    : "🤖 تفعيل بوت النصاب (يكذب عشوائياً)"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.modeSettingsCard}>
+              <Text style={styles.modeCardTitle}>
+                إعدادات طور السرعة والاختيارات ⚡
+              </Text>
+              <Text style={styles.modeCardDesc}>
+                تحدي 10 ثوانٍ لكل سؤال، 4 خيارات (3 غلط وواحدة صح)، النقاط حسب
+                سرعة الإجابة الصحيحة!
+              </Text>
+            </View>
+          )}
+
+          <Text style={styles.label}>اختر الفئات:</Text>
+          <View style={styles.grid}>
+            {categories.map((cat) => {
+              const isSelected = selectedCategories.includes(cat);
+              return (
+                <TouchableOpacity
+                  key={cat}
+                  style={[styles.catBtn, isSelected && styles.selectedCat]}
+                  onPress={() => toggleCategory(cat)}
+                >
+                  <Text
+                    style={[
+                      styles.catText,
+                      isSelected && styles.selectedCatText,
+                    ]}
+                  >
+                    {cat}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          <Text style={styles.label}>عدد الجولات: {rounds}</Text>
+          <View style={styles.counterRow}>
+            <TouchableOpacity
+              style={styles.countBtn}
+              onPress={() => setRounds(Math.max(1, rounds - 1))}
+            >
+              <Text style={styles.countText}>-</Text>
+            </TouchableOpacity>
+            <Text style={styles.countValue}>{rounds}</Text>
+            <TouchableOpacity
+              style={styles.countBtn}
+              onPress={() => setRounds(rounds + 1)}
+            >
+              <Text style={styles.countText}>+</Text>
+            </TouchableOpacity>
+          </View>
+
+          <Text style={styles.label}>عدد الأشخاص بالغرفة: {maxPlayers}</Text>
+          <View style={styles.counterRow}>
+            <TouchableOpacity
+              style={styles.countBtn}
+              onPress={() => setMaxPlayers(Math.max(2, maxPlayers - 1))}
+            >
+              <Text style={styles.countText}>-</Text>
+            </TouchableOpacity>
+            <Text style={styles.countValue}>{maxPlayers}</Text>
+            <TouchableOpacity
+              style={styles.countBtn}
+              onPress={() => setMaxPlayers(maxPlayers + 1)}
+            >
+              <Text style={styles.countText}>+</Text>
+            </TouchableOpacity>
+          </View>
+
+          <TouchableOpacity
+            style={[
+              styles.buttonPrimary,
+              { marginTop: 25, alignSelf: "center" },
+            ]}
+            onPress={() => alert("تم حفظ الإعدادات بنجاح!")}
+          >
+            <Text style={styles.buttonText}>حفظ الإعدادات</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.buttonSecondary,
+              { marginTop: 12, alignSelf: "center" },
+            ]}
+            onPress={() => setScreen("create")}
+          >
+            <Text style={styles.buttonTextSecondary}>الرجوع للغرفة</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
+  // شاشة محاكي طور السرعة والاختيارات (10 ثواني، 3 غلط وواحدة صح، النقاط للأسرع)
+  if (screen === "speedGameSim") {
+    return (
+      <SafeAreaView style={styles.container}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContainer}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.roundHeaderRow}>
+            <View style={styles.roundHeaderBox}>
+              <Text style={styles.roundHeaderText}>
+                جولة سرعة {speedRound} / {rounds}
+              </Text>
+            </View>
+            <View
+              style={[
+                styles.roundHeaderBox,
+                { backgroundColor: speedTimer <= 3 ? "#991b1b" : "#0369a1" },
+              ]}
+            >
+              <Text style={styles.roundHeaderText}>⚡ {speedTimer} ثواني</Text>
+            </View>
+          </View>
+
+          {speedStep === "playing" && (
+            <View style={styles.liveGameCard}>
+              <Text style={styles.simQuestionTitle}>
+                السؤال السريع: ما هو عنصر الذهب في الجدول الدوري؟
+              </Text>
+              <Text style={styles.modeCardDesc}>
+                اختر الإجابة الصحيحة بأسرع وقت ممكن لتكسب نقاط أكثر:
+              </Text>
+
+              <View style={styles.optionsMockContainer}>
+                {[
+                  "Fe (حديد)",
+                  "Au (ذهب - الإجابة الصحيحة)",
+                  "Ag (فضة)",
+                  "Cu (نحاس)",
+                ].map((optText, index) => {
+                  const isSelected = speedSelectedOpt === index;
+                  return (
+                    <TouchableOpacity
+                      key={index}
+                      style={[
+                        styles.mockOptBtn,
+                        isSelected && styles.selectedMockOptBtn,
+                      ]}
+                      onPress={() => setSpeedSelectedOpt(index)}
+                    >
+                      <Text
+                        style={[
+                          styles.mockOptText,
+                          isSelected && { color: "#fff", fontWeight: "bold" },
+                        ]}
+                      >
+                        {optText}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              <TouchableOpacity
+                style={[
+                  styles.buttonPrimary,
+                  { marginTop: 15, backgroundColor: "#0284c7" },
+                ]}
+                onPress={() => {
+                  setSpeedTimer(10);
+                  setSpeedStep("result");
+                }}
+              >
+                <Text style={styles.buttonText}>تثبيت الإجابة السريعة 🚀</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {speedStep === "result" && (
+            <View style={styles.liveGameCard}>
+              <Text style={styles.simQuestionTitle}>
+                📊 نتائج جولة السرعة {speedRound}
+              </Text>
+              <Text style={styles.modeCardDesc}>
+                توزيع النقاط حسب سرعة الإجابة الصحيحة (الأول 3، الثاني 2، الثالث
+                1، ومن أاب خطأ لا شيء):
+              </Text>
+
+              <View style={styles.playersListContainer}>
+                {players.map((p, idx) => (
+                  <View key={p.id} style={styles.playerCard}>
+                    <Text style={styles.playerName}>{p.name}</Text>
+                    <Text
+                      style={{
+                        color: idx === 0 ? "#10b981" : "#fbbf24",
+                        fontWeight: "bold",
+                        fontSize: 13,
+                      }}
+                    >
+                      {idx === 0
+                        ? "+3 نقاط (الأسرع الأول)"
+                        : idx === 1
+                          ? "+2 نقطة (الثاني)"
+                          : "+1 نقطة (الثالث)"}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+
+              <TouchableOpacity
+                style={[
+                  styles.buttonPrimary,
+                  { marginTop: 20, backgroundColor: "#0284c7" },
+                ]}
+                onPress={() => {
+                  if (speedRound < rounds) {
+                    setSpeedRound((prev) => prev + 1);
+                    setSpeedSelectedOpt(null);
+                    setSpeedTimer(10);
+                    setSpeedStep("playing");
+                  } else {
+                    setSpeedStep("final");
+                  }
+                }}
+              >
+                <Text style={styles.buttonText}>
+                  {speedRound < rounds
+                    ? "الجولة التالية من السرعة ➡️"
+                    : "عرض منصة التتويج النهائية 🏆"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {speedStep === "final" && (
+            <View style={styles.liveGameCard}>
+              <Text style={styles.simQuestionTitle}>
+                🏆 الترتيب النهائي لطور السرعة
+              </Text>
+              <Text style={styles.modeCardDesc}>أبطال التحدي السريع:</Text>
+
+              <View style={styles.playersListContainer}>
+                {players.map((p, idx) => (
+                  <View
+                    key={p.id}
+                    style={[
+                      styles.playerCard,
+                      idx === 0 && {
+                        borderColor: "#fbbf24",
+                        backgroundColor: "#3b2207",
+                      },
+                    ]}
+                  >
+                    <Text style={styles.playerName}>
+                      {idx === 0
+                        ? "🥇 الأول: "
+                        : idx === 1
+                          ? "🥈 الثاني: "
+                          : "🥉 الثالث: "}{" "}
+                      {p.name}
+                    </Text>
+                    <Text
+                      style={{
+                        color: "#fbbf24",
+                        fontSize: 16,
+                        fontWeight: "bold",
+                      }}
+                    >
+                      {12 - idx * 3} نقطة
+                    </Text>
+                  </View>
+                ))}
+              </View>
+
+              <TouchableOpacity
+                style={[
+                  styles.buttonSecondary,
+                  { marginTop: 20, backgroundColor: "#0284c7" },
+                ]}
+                onPress={() => setScreen("create")}
+              >
+                <Text style={styles.buttonTextSecondary}>
+                  العودة للغرفة الرئيسية
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          <TouchableOpacity
+            style={[
+              styles.buttonSecondary,
+              { marginTop: 25, backgroundColor: "#4c1d95" },
+            ]}
+            onPress={() => setScreen("create")}
+          >
+            <Text style={styles.buttonTextSecondary}>
+              إنهاء ورجوع للإعدادات
+            </Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
+  // شاشة محاكي طور الكذب والخداع
+  if (screen === "liveGameSim") {
+    return (
+      <SafeAreaView style={styles.container}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContainer}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.roundHeaderRow}>
+            <View style={styles.roundHeaderBox}>
+              <Text style={styles.roundHeaderText}>
+                الجولة {currentRound} / {rounds}
+              </Text>
+            </View>
+            <View
+              style={[styles.roundHeaderBox, { backgroundColor: "#7f1d1d" }]}
+            >
+              <Text style={styles.roundHeaderText}>
+                ⏳ {Math.floor(timer / 60)}:{timer % 60 < 10 ? "0" : ""}
+                {timer % 60}
+              </Text>
+            </View>
+          </View>
+
+          {simulationStep === "writeLie" && (
+            <View style={styles.liveGameCard}>
+              <Text style={styles.simQuestionTitle}>
+                السؤال: ما هو الكوكب الذي يمتلك أكبر عدد من الأقمار؟
+              </Text>
+              <Text style={styles.modeCardDesc}>
+                اكتب كذبتك (التايمر دقيقة ونص):
+              </Text>
+
+              <TextInput
+                style={styles.textInputBox}
+                placeholder="اكتب كذبتك الأولى هنا..."
+                placeholderTextColor="#94a3b8"
+                value={lieInput1}
+                onChangeText={setLieInput1}
+              />
+
+              <View style={styles.abilitiesContainerSim}>
+                {!isDoubleLieUsed && (
+                  <TouchableOpacity
+                    style={[
+                      styles.miniAbilityBtn,
+                      selectedWriteAbility === "doubleLie" &&
+                        styles.activeAbilityBtn,
+                    ]}
+                    onPress={() => {
+                      if (selectedWriteAbility === "doubleLie")
+                        setSelectedWriteAbility(null);
+                      else setSelectedWriteAbility("doubleLie");
+                    }}
+                  >
+                    <Text style={styles.miniAbilityText}>
+                      ⚡ قدرة: دبل كذبة (إضافة خانة كذبة ثانية)
+                    </Text>
+                  </TouchableOpacity>
+                )}
+
+                {!isDoubleLieScoreUsed && (
+                  <TouchableOpacity
+                    style={[
+                      styles.miniAbilityBtn,
+                      selectedWriteAbility === "doubleLieScore" &&
+                        styles.activeAbilityBtn,
+                    ]}
+                    onPress={() => {
+                      if (selectedWriteAbility === "doubleLieScore")
+                        setSelectedWriteAbility(null);
+                      else setSelectedWriteAbility("doubleLieScore");
+                    }}
+                  >
+                    <Text style={styles.miniAbilityText}>
+                      🔥 قدرة: تدبيل نقاط كذبتي
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {selectedWriteAbility === "doubleLie" && (
+                <TextInput
+                  style={[styles.textInputBox, { borderColor: "#10b981" }]}
+                  placeholder="اكتب الكذبة الثانية الإضافية..."
+                  placeholderTextColor="#94a3b8"
+                  value={lieInput2}
+                  onChangeText={setLieInput2}
+                />
+              )}
+
+              <TouchableOpacity
+                style={[styles.buttonPrimary, { marginTop: 15 }]}
+                onPress={() => {
+                  if (selectedWriteAbility === "doubleLie")
+                    setIsDoubleLieUsed(true);
+                  if (selectedWriteAbility === "doubleLieScore")
+                    setIsDoubleLieScoreUsed(true);
+                  setTimer(90);
+                  setSimulationStep("chooseAnswer");
+                }}
+              >
+                <Text style={styles.buttonText}>
+                  إرسال الكذبة والانتقال للتنقي 🎯
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {simulationStep === "chooseAnswer" && (
+            <View style={styles.liveGameCard}>
+              <Text style={styles.simQuestionTitle}>
+                السؤال: ما هو الكوكب الذي يمتلك أكبر عدد من الأقمار؟
+              </Text>
+              <Text style={styles.modeCardDesc}>
+                اختر الإجابة الصحيحة أو كذبة الشباب:
+              </Text>
+
+              <View style={styles.optionsMockContainer}>
+                {[
+                  "زحل (الإجابة الصحيحة)",
+                  "المشتري (كذبة مطروحة)",
+                  selectedWriteAbility === "doubleLie" && lieInput2
+                    ? lieInput2
+                    : "أورانوس (كذبة عشوائية)",
+                  "المريخ (كذبة البوت)",
+                ]
+                  .filter(Boolean)
+                  .filter(
+                    (opt) =>
+                      !clarificationActive || opt.includes("الإجابة الصحيحة"),
+                  )
+                  .map((optText, index) => {
+                    const isSelected = selectedChoiceIndex === index;
+                    return (
+                      <TouchableOpacity
+                        key={index}
+                        style={[
+                          styles.mockOptBtn,
+                          isSelected && styles.selectedMockOptBtn,
+                        ]}
+                        onPress={() => setSelectedChoiceIndex(index)}
+                      >
+                        <Text
+                          style={[
+                            styles.mockOptText,
+                            isSelected && { color: "#fff", fontWeight: "bold" },
+                          ]}
+                        >
+                          {optText}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+              </View>
+
+              <Text style={styles.labelSub}>قدرات التنقي:</Text>
+              <View style={styles.abilitiesContainerSim}>
+                {!isClarificationUsed && (
+                  <TouchableOpacity
+                    style={[
+                      styles.miniAbilityBtn,
+                      clarificationActive && styles.activeAbilityBtn,
+                    ]}
+                    onPress={() => {
+                      if (!doubleLuckActive) {
+                        const newState = !clarificationActive;
+                        setClarificationActive(newState);
+                        if (newState) setIsClarificationUsed(true);
+                      } else {
+                        alert("لا يمكنك دمج قدرة التوضيح مع دبل النقاط!");
+                      }
+                    }}
+                  >
+                    <Text style={styles.miniAbilityText}>
+                      🔍 قدرة التوضيح (حذف الكذب وإبقاء الصح)
+                    </Text>
+                  </TouchableOpacity>
+                )}
+
+                {!isDoubleLuckUsed && (
+                  <TouchableOpacity
+                    style={[
+                      styles.miniAbilityBtn,
+                      doubleLuckActive && styles.activeAbilityBtn,
+                    ]}
+                    onPress={() => {
+                      if (!clarificationActive) {
+                        const newState = !doubleLuckActive;
+                        setDoubleLuckActive(newState);
+                        if (newState) setIsDoubleLuckUsed(true);
+                      } else {
+                        alert("لا يمكنك دمج دبل النقاط مع التوضيح!");
+                      }
+                    }}
+                  >
+                    <Text style={styles.miniAbilityText}>
+                      🎲 قدرة دبل التنقاي (مضاعفة النقاط)
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              <TouchableOpacity
+                style={[styles.buttonPrimary, { marginTop: 20 }]}
+                onPress={() => {
+                  setTimer(90);
+                  setSimulationStep("roundResult");
+                }}
+              >
+                <Text style={styles.buttonText}>
+                  تثبيت الاختيار صحيح والانتقال للنتائج
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {simulationStep === "roundResult" && (
+            <View style={styles.liveGameCard}>
+              <Text style={styles.simQuestionTitle}>
+                📊 تقرير تفاصيل الجولة {currentRound}
+              </Text>
+              <Text style={styles.modeCardDesc}>
+                ماذا اخترتم، كم تغيرت النقاط، والسبب لكل لاعب:
+              </Text>
+
+              <View style={styles.playersListContainer}>
+                {playersScores.map((p, idx) => (
+                  <View key={idx} style={styles.playerCard}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.playerName}>{p.name}</Text>
+                      <Text style={styles.playerRole}>ختار: {p.choice}</Text>
+                      <Text
+                        style={{ color: "#94a3b8", fontSize: 11, marginTop: 2 }}
+                      >
+                        السبب: {p.reason}
+                      </Text>
+                    </View>
+                    <View style={{ alignItems: "flex-end" }}>
+                      <Text
+                        style={{
+                          color: p.diff.includes("+")
+                            ? "#10b981"
+                            : p.diff.includes("-")
+                              ? "#f43f5e"
+                              : "#c084fc",
+                          fontWeight: "bold",
+                          fontSize: 13,
+                        }}
+                      >
+                        {p.diff}
+                      </Text>
+                      <Text
+                        style={{ color: "#c084fc", fontSize: 12, marginTop: 3 }}
+                      >
+                        الإجمالي: {p.score}
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+
+              <TouchableOpacity
+                style={[styles.buttonPrimary, { marginTop: 20 }]}
+                onPress={() => setSimulationStep("leaderboard")}
+              >
+                <Text style={styles.buttonText}>عرض نقاط وترتيب الجميع 🏆</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {simulationStep === "leaderboard" && (
+            <View style={styles.liveGameCard}>
+              <Text style={styles.simQuestionTitle}>
+                🏆 جدول النقاط وترتيب اللاعبين
+              </Text>
+              <Text style={styles.modeCardDesc}>
+                الترتيب الحالي بعد نهاية الجولة {currentRound}:
+              </Text>
+
+              <View style={styles.playersListContainer}>
+                {playersScores
+                  .sort((a, b) => b.score - a.score)
+                  .map((p, idx) => (
+                    <View key={idx} style={styles.playerCard}>
+                      <Text style={styles.playerName}>
+                        {idx + 1}. {p.name}
+                      </Text>
+                      <Text
+                        style={{
+                          color: "#fbbf24",
+                          fontSize: 15,
+                          fontWeight: "bold",
+                        }}
+                      >
+                        {p.score} نقطة
+                      </Text>
+                    </View>
+                  ))}
+              </View>
+
+              <TouchableOpacity
+                style={[
+                  styles.buttonPrimary,
+                  { marginTop: 20, backgroundColor: "#10b981" },
+                ]}
+                onPress={() => {
+                  if (currentRound < rounds) {
+                    setCurrentRound((prev) => prev + 1);
+                    setLieInput1("");
+                    setLieInput2("");
+                    setSelectedChoiceIndex(null);
+                    setClarificationActive(false);
+                    setDoubleLuckActive(false);
+                    setSelectedWriteAbility(null);
+                    setTimer(90);
+                    setSimulationStep("writeLie");
+                  } else {
+                    setSimulationStep("finalPodium");
+                  }
+                }}
+              >
+                <Text style={styles.buttonText}>
+                  {currentRound < rounds
+                    ? "الانتقال للجولة التالية ➡️"
+                    : "عرض المراكز النهائية والمنصة 🥇"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {simulationStep === "finalPodium" && (
+            <View style={styles.liveGameCard}>
+              <Text style={styles.simQuestionTitle}>
+                🎖️ منصة التتويج والمراكز النهائية
+              </Text>
+              <Text style={styles.modeCardDesc}>
+                انتهت الجولات بالكامل! هكذا استقرت المراكز:
+              </Text>
+
+              <View style={styles.playersListContainer}>
+                {playersScores
+                  .sort((a, b) => b.score - a.score)
+                  .map((p, idx) => (
+                    <View
+                      key={idx}
+                      style={[
+                        styles.playerCard,
+                        idx === 0 && {
+                          borderColor: "#fbbf24",
+                          backgroundColor: "#3b2207",
+                        },
+                      ]}
+                    >
+                      <Text style={styles.playerName}>
+                        {idx === 0
+                          ? "🥇 الأول: "
+                          : idx === 1
+                            ? "🥈 الثاني: "
+                            : idx === 2
+                              ? "🥉 الثالث: "
+                              : `${idx + 1} مكرر: `}
+                        {p.name}
+                      </Text>
+                      <Text
+                        style={{
+                          color: "#fbbf24",
+                          fontSize: 16,
+                          fontWeight: "bold",
+                        }}
+                      >
+                        {p.score} نقطة
+                      </Text>
+                    </View>
+                  ))}
+              </View>
+
+              <TouchableOpacity
+                style={[
+                  styles.buttonSecondary,
+                  { marginTop: 20, backgroundColor: "#7c3aed" },
+                ]}
+                onPress={() => setScreen("create")}
+              >
+                <Text style={styles.buttonTextSecondary}>
+                  العودة للغرفة الرئيسية
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          <TouchableOpacity
+            style={[
+              styles.buttonSecondary,
+              { marginTop: 25, backgroundColor: "#4c1d95" },
+            ]}
+            onPress={() => setScreen("create")}
+          >
+            <Text style={styles.buttonTextSecondary}>
+              إنهاء ورجوع للإعدادات
+            </Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <ScrollView
+        contentContainerStyle={styles.homeScrollContainer}
+        showsVerticalScrollIndicator={false}
+      >
+        <Text style={styles.logo}>🔥 فلها أو ما تفلها 🔥</Text>
+        <Text style={styles.slogan}>يا زنوج استعدو 🔥</Text>
+
+        <View style={styles.buttonContainer}>
+          <TouchableOpacity
+            style={styles.buttonPrimary}
+            onPress={handleCreateRoom}
+          >
+            <Text style={styles.buttonText}>إنشاء غرفة</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.buttonOutline}
+            onPress={() => setScreen("joinRoom")}
+          >
+            <Text style={styles.buttonTextOutline}>دخول إلى غرفة</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: "#0f071e", padding: 20 },
+  homeScrollContainer: {
+    paddingTop: 120,
+    alignItems: "center",
+    paddingBottom: 40,
+  },
+  scrollContainer: { paddingTop: 10, paddingBottom: 40, alignItems: "center" },
+  centerBox: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    width: "100%",
+  },
+  logo: {
+    fontSize: 32,
+    fontWeight: "bold",
+    color: "#c084fc",
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  slogan: {
+    fontSize: 18,
+    color: "#f43f5e",
+    fontWeight: "bold",
+    marginBottom: 50,
+    textAlign: "center",
+  },
+  buttonContainer: {
+    width: "100%",
+    maxWidth: 300,
+    alignSelf: "center",
+    gap: 15,
+  },
+  buttonPrimary: {
+    backgroundColor: "#7c3aed",
+    paddingVertical: 15,
+    paddingHorizontal: 30,
+    borderRadius: 12,
+    alignItems: "center",
+    width: "100%",
+    maxWidth: 300,
+    alignSelf: "center",
+  },
+  buttonText: { color: "#ffffff", fontSize: 18, fontWeight: "bold" },
+  buttonOutline: {
+    borderWidth: 2,
+    borderColor: "#c084fc",
+    paddingVertical: 15,
+    borderRadius: 12,
+    alignItems: "center",
+    width: "100%",
+    maxWidth: 300,
+    alignSelf: "center",
+  },
+  buttonTextOutline: { color: "#c084fc", fontSize: 18, fontWeight: "bold" },
+  configMainTitle: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#ffffff",
+    marginBottom: 15,
+    textAlign: "center",
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#ffffff",
+    marginBottom: 20,
+    textAlign: "center",
+  },
+  codeLabel: {
+    fontSize: 16,
+    color: "#c084fc",
+    marginBottom: 10,
+    textAlign: "center",
+  },
+  codeBox: {
+    backgroundColor: "#1e113a",
+    paddingVertical: 15,
+    paddingHorizontal: 30,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#7c3aed",
+    marginBottom: 20,
+    alignSelf: "center",
+  },
+  codeText: {
+    fontSize: 36,
+    fontWeight: "bold",
+    color: "#c084fc",
+    letterSpacing: 5,
+  },
+  subtitle: {
+    color: "#94a3b8",
+    fontSize: 14,
+    marginBottom: 20,
+    textAlign: "center",
+  },
+  buttonSecondary: {
+    backgroundColor: "#2e1065",
+    paddingVertical: 12,
+    paddingHorizontal: 25,
+    borderRadius: 8,
+    alignItems: "center",
+    width: "100%",
+    maxWidth: 300,
+    alignSelf: "center",
+    marginTop: 15,
+  },
+  buttonTextSecondary: { color: "#c084fc", fontSize: 16, fontWeight: "bold" },
+  label: {
+    color: "#c084fc",
+    fontSize: 16,
+    fontWeight: "bold",
+    alignSelf: "flex-start",
+    marginBottom: 8,
+    marginTop: 15,
+  },
+  labelSub: {
+    color: "#c084fc",
+    fontSize: 13,
+    fontWeight: "bold",
+    alignSelf: "flex-start",
+    marginBottom: 8,
+    marginTop: 10,
+  },
+  row: {
+    flexDirection: "row",
+    gap: 10,
+    width: "100%",
+    justifyContent: "space-between",
+  },
+  optionBtn: {
+    flex: 1,
+    backgroundColor: "#1e113a",
+    padding: 12,
+    borderRadius: 10,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#4c1d95",
+  },
+  selectedOpt: { backgroundColor: "#7c3aed", borderColor: "#c084fc" },
+  optionText: {
+    color: "#94a3b8",
+    fontWeight: "bold",
+    fontSize: 12,
+    textAlign: "center",
+  },
+  selectedOptText: { color: "#fff" },
+  modeSettingsCard: {
+    backgroundColor: "#1e113a",
+    width: "100%",
+    padding: 15,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#7c3aed",
+    marginTop: 15,
+  },
+  modeCardTitle: {
+    color: "#c084fc",
+    fontSize: 14,
+    fontWeight: "bold",
+    marginBottom: 5,
+    textAlign: "center",
+  },
+  modeCardDesc: {
+    color: "#94a3b8",
+    fontSize: 12,
+    textAlign: "right",
+    lineHeight: 18,
+    marginBottom: 10,
+  },
+  botToggleBtn: {
+    backgroundColor: "#0f071e",
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#4c1d95",
+    alignItems: "center",
+    marginTop: 8,
+  },
+  activeToggle: { backgroundColor: "#7c3aed", borderColor: "#c084fc" },
+  toggleText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "bold",
+    textAlign: "center",
+  },
+  grid: { flexDirection: "row", flexWrap: "wrap", gap: 8, width: "100%" },
+  catBtn: {
+    backgroundColor: "#1e113a",
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#4c1d95",
+  },
+  selectedCat: { backgroundColor: "#10b981", borderColor: "#34d399" },
+  catText: { color: "#94a3b8" },
+  selectedCatText: { color: "#fff", fontWeight: "bold" },
+  counterRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#1e113a",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#4c1d95",
+    width: "100%",
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+  },
+  countBtn: {
+    backgroundColor: "#4c1d95",
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  countText: { color: "#fff", fontSize: 22, fontWeight: "bold" },
+  countValue: { color: "#c084fc", fontSize: 22, fontWeight: "bold" },
+  playersListContainer: { width: "100%", gap: 10 },
+  playerCard: {
+    backgroundColor: "#1e113a",
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#4c1d95",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  botCardStyle: { borderColor: "#f43f5e", backgroundColor: "#2e1026" },
+  playerName: { color: "#fff", fontSize: 14, fontWeight: "bold" },
+  playerRole: { color: "#c084fc", fontSize: 11, marginTop: 2 },
+  playerActions: { flexDirection: "row", gap: 6 },
+  actionBtnLeader: {
+    backgroundColor: "#7c3aed",
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+  },
+  actionBtnKick: {
+    backgroundColor: "#f43f5e",
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+  },
+  actionBtnText: { color: "#fff", fontSize: 11, fontWeight: "bold" },
+  liveGameCard: {
+    backgroundColor: "#1e113a",
+    width: "100%",
+    padding: 18,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#7c3aed",
+    alignItems: "center",
+  },
+  roundHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    width: "100%",
+    marginBottom: 12,
+    gap: 10,
+  },
+  roundHeaderBox: {
+    flex: 1,
+    backgroundColor: "#3b0764",
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#7c3aed",
+    alignItems: "center",
+  },
+  roundHeaderText: { color: "#f3e8ff", fontSize: 13, fontWeight: "bold" },
+  simQuestionTitle: {
+    color: "#ffffff",
+    fontSize: 15,
+    fontWeight: "bold",
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  modeCardDesc: {
+    color: "#94a3b8",
+    fontSize: 12,
+    textAlign: "right",
+    lineHeight: 18,
+    marginBottom: 10,
+    width: "100%",
+  },
+  textInputBox: {
+    backgroundColor: "#0f071e",
+    width: "100%",
+    borderWidth: 1,
+    borderColor: "#7c3aed",
+    borderRadius: 10,
+    padding: 12,
+    color: "#fff",
+    marginTop: 10,
+    marginBottom: 10,
+    textAlign: "right",
+  },
+  abilitiesContainerSim: { width: "100%", gap: 6, marginBottom: 10 },
+  miniAbilityBtn: {
+    backgroundColor: "#1f103d",
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#7c3aed",
+    alignItems: "center",
+  },
+  activeAbilityBtn: { backgroundColor: "#10b981", borderColor: "#34d399" },
+  miniAbilityText: { color: "#c084fc", fontSize: 12, fontWeight: "bold" },
+  optionsMockContainer: {
+    width: "100%",
+    gap: 8,
+    marginTop: 10,
+    marginBottom: 15,
+  },
+  mockOptBtn: {
+    backgroundColor: "#2e1065",
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#7c3aed",
+    alignItems: "center",
+  },
+  selectedMockOptBtn: { backgroundColor: "#10b981", borderColor: "#34d399" },
+  mockOptText: { color: "#fff", fontSize: 13, textAlign: "center" },
+});
